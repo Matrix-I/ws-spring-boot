@@ -2,35 +2,57 @@
 <html>
 <head>
     <meta charset="UTF-8"/>
-    <title>WebSocket JWT Test</title>
+    <title>STOMP WebSocket JWT Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jwt-decode/build/jwt-decode.min.js"></script>
 </head>
 <body>
-<h1>WebSocket with JWT</h1>
+<h1>STOMP WebSocket with JWT</h1>
 <button onclick="connect()">Connect</button>
 <button onclick="sendMessage()">Send</button>
+<input id="msg" placeholder="Type message..."/>
 <div id="log"></div>
 
 <script>
-    let ws;
+    let stompClient;
 
     async function connect() {
-        // Get token from server
         const token = await fetch("http://localhost:8080/auth/token")
             .then(r => r.text());
         log("Token: " + token);
 
-        ws = new WebSocket("ws://localhost:8080/ws?token=" + token);
+        const decoded = jwt_decode(token);
+        const currentUser = decoded.sub;   // <- set current user from JWT "sub"
 
-        ws.onopen = () => log("Connected");
-        ws.onmessage = e => log("Message: " + e.data);
-        ws.onclose = () => log("Disconnected");
+        const socket = new SockJS("http://localhost:8080/ws?token=" + encodeURIComponent(token));
+        stompClient = Stomp.over(socket);
+
+
+        stompClient.connect(
+            {Authorization: "Bearer " + token}, // send JWT in headers
+            (frame) => {
+                log("Connected: " + frame);
+                // subscribe to broadcast topic
+                stompClient.subscribe("/topic/messages", (message) => {
+                    // // ignore messages from current user
+                    // if (message.headers.simpSessionId !== currentUser) {
+                    //     log("Received: " + message.body);
+                    // }
+
+                    log("Received: " + message.body);
+                });
+            },
+            (error) => log("Connection error: " + error)
+        );
     }
 
     function sendMessage() {
-        log("Sending message...");
-        log(ws.readyState);
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send("Hello from client");
+        if (stompClient && stompClient.connected) {
+            const msg = document.getElementById("msg").value || "Hello from client";
+            stompClient.send("/app/chat", {}, msg);
+        } else {
+            log("Not connected.");
         }
     }
 

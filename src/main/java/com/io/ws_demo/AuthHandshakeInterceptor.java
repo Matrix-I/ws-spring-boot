@@ -2,8 +2,13 @@ package com.io.ws_demo;
 
 import io.jsonwebtoken.Jwts;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.Collections;
 import java.util.Map;
+import org.springframework.http.server.ServerHttpRequest;
+import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
@@ -11,12 +16,10 @@ public class AuthHandshakeInterceptor implements HandshakeInterceptor {
 
   @Override
   public boolean beforeHandshake(
-      org.springframework.http.server.ServerHttpRequest request,
-      org.springframework.http.server.ServerHttpResponse response,
+      ServerHttpRequest request,
+      ServerHttpResponse response,
       WebSocketHandler wsHandler,
-      Map<String, Object> attributes)
-      throws Exception {
-    // Lấy token từ query param hoặc header
+      Map<String, Object> attributes) {
     String token = null;
     if (request instanceof ServletServerHttpRequest servletRequest) {
       HttpServletRequest httpRequest = servletRequest.getServletRequest();
@@ -27,15 +30,22 @@ public class AuthHandshakeInterceptor implements HandshakeInterceptor {
       return false; // reject connection
     }
 
-    // Nếu ok thì lưu user info vào attributes
-    attributes.put("user", extractUserFromToken(token));
+    // Should read token and extract username from it
+    UsernamePasswordAuthenticationToken authentication =
+        new UsernamePasswordAuthenticationToken(
+            new UserPrincipal(extractUserFromToken(token)),
+            null,
+            Collections.singleton(new SimpleGrantedAuthority("ROLE_USER")));
+
+    // Put into attributes so the HandshakeHandler can set it as Principal
+    attributes.put("SPRING_AUTH", authentication);
     return true;
   }
 
   @Override
   public void afterHandshake(
-      org.springframework.http.server.ServerHttpRequest request,
-      org.springframework.http.server.ServerHttpResponse response,
+      ServerHttpRequest request,
+      ServerHttpResponse response,
       WebSocketHandler wsHandler,
       Exception exception) {}
 
